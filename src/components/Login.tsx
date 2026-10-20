@@ -74,7 +74,12 @@ export function Login() {
       } else if (mode === 'criar') {
         const { data, error } = await signUp(mail, password);
         if (error) setError(authMessage(error));
-        else if (!data.session) setInfo('Conta criada! Confirme seu e-mail para entrar.');
+        else if (data.user?.identities?.length === 0) setError(authMessage({ code: 'user_already_exists', message: '' }));
+        else {
+          setMode('entrar');
+          setPassword('');
+          setInfo(data.session ? 'Conta criada! Entre com seu e-mail e senha.' : 'Conta criada! Confirme seu e-mail para poder entrar.');
+        }
       } else {
         const { error } = await resetPassword(mail);
         if (error) setError(authMessage(error));
