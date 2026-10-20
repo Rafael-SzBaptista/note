@@ -12,6 +12,7 @@ import { Dialog, Drawer, EscalasList, Fab, MiniMonth, Snackbar, type DialogActio
 import { TimeGrid } from './components/TimeGrid';
 import { addDays, addMonths, dateKey, dtKey, fmtShortDate, MONTHS, parseDT, startOfMonth, startOfWeek } from './lib/date';
 import { escalaOccurrences, getItems, isWork, itemsStartingOn, type Item } from './lib/items';
+import { useBackNavigation } from './lib/backNav';
 import { checkReminders } from './lib/reminders';
 import {
   newEscala, uid, useStore, type Escala, type EventKind, type Evento, type Nota, type ShiftOverride, type State, type View,
@@ -104,6 +105,34 @@ export default function App() {
     update((s) => ({ ...s, view: v }));
     setDrawer(false);
   };
+
+  /* ---------- botão voltar do celular: fecha a camada de cima ---------- */
+  const overlay = drawer || fab || picker;
+  const layers = { dialog: !!dialog, overlay, sheets: stack.length, view: view !== 'hoje' };
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+  useBackNavigation(Number(layers.dialog) + Number(layers.overlay) + layers.sheets + Number(layers.view), (n) => {
+    const l = { ...layersRef.current };
+    let sheets = 0;
+    for (let i = 0; i < n; i++) {
+      if (l.dialog) {
+        setDialog(null);
+        l.dialog = false;
+      } else if (l.overlay) {
+        setDrawer(false);
+        setFab(false);
+        setPicker(false);
+        l.overlay = false;
+      } else if (l.sheets > 0) {
+        l.sheets--;
+        sheets++;
+      } else if (l.view) {
+        update((s) => ({ ...s, view: 'hoje' }));
+        l.view = false;
+      }
+    }
+    if (sheets) setStack((st) => st.slice(0, st.length - sheets));
+  });
 
   const move = (dir: 1 | -1) => {
     if (view === 'mes' || view === 'agenda') setCursor((c) => addMonths(c, dir));
