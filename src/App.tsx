@@ -101,17 +101,24 @@ export default function App() {
   }, []);
 
   const view = state.view;
+  /** Visão de onde o usuário abriu um dia; o botão voltar retorna para ela. */
+  const [dayFrom, setDayFrom] = useState<View | null>(null);
   const setView = (v: View) => {
     update((s) => ({ ...s, view: v }));
+    setDayFrom(null);
     setDrawer(false);
   };
 
   /* ---------- botão voltar do celular: fecha a camada de cima ---------- */
   const overlay = drawer || fab || picker;
-  const layers = { dialog: !!dialog, overlay, sheets: stack.length, view: view !== 'hoje' };
+  // "dia" aberto a partir de outra visão (ex.: mês) conta como uma camada a mais sobre ela
+  const dayOver = view === 'dia' && !!dayFrom && dayFrom !== 'hoje' && dayFrom !== 'dia';
+  const layers = { dialog: !!dialog, overlay, sheets: stack.length, view: view === 'hoje' ? 0 : dayOver ? 2 : 1 };
   const layersRef = useRef(layers);
   layersRef.current = layers;
-  useBackNavigation(Number(layers.dialog) + Number(layers.overlay) + layers.sheets + Number(layers.view), (n) => {
+  const dayFromRef = useRef(dayFrom);
+  dayFromRef.current = dayFrom;
+  useBackNavigation(Number(layers.dialog) + Number(layers.overlay) + layers.sheets + layers.view, (n) => {
     const l = { ...layersRef.current };
     let sheets = 0;
     for (let i = 0; i < n; i++) {
@@ -126,9 +133,15 @@ export default function App() {
       } else if (l.sheets > 0) {
         l.sheets--;
         sheets++;
-      } else if (l.view) {
+      } else if (l.view === 2 && dayFromRef.current) {
+        const back = dayFromRef.current;
+        update((s) => ({ ...s, view: back }));
+        setDayFrom(null);
+        l.view = 1;
+      } else if (l.view > 0) {
         update((s) => ({ ...s, view: 'hoje' }));
-        l.view = false;
+        setDayFrom(null);
+        l.view = 0;
       }
     }
     if (sheets) setStack((st) => st.slice(0, st.length - sheets));
@@ -140,6 +153,7 @@ export default function App() {
   };
   const goDay = (d: Date) => {
     setCursor(d);
+    if (view !== 'dia') setDayFrom(view);
     update((s) => ({ ...s, view: 'dia' }));
   };
   const openItem = (item: Item) => push({ t: 'detail', item });
