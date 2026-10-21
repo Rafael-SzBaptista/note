@@ -80,6 +80,7 @@ export default function App() {
   const [drawer, setDrawer] = useState(false);
   const [fab, setFab] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [pickerShown, setPickerShown] = useState(false);
   const [dialog, setDialog] = useState<{ text: string; actions: DialogAction[] } | null>(null);
   const [snack, setSnack] = useState<{ text: string; undo: State; id: number } | null>(null);
 
@@ -108,6 +109,13 @@ export default function App() {
     setDayFrom(null);
     setDrawer(false);
   };
+
+  // o mini calendário continua montado até terminar a animação de fechar (.mini-wrap)
+  useEffect(() => {
+    if (picker) return setPickerShown(true);
+    const t = window.setTimeout(() => setPickerShown(false), 320);
+    return () => clearTimeout(t);
+  }, [picker]);
 
   /* ---------- botão voltar do celular: fecha a camada de cima ---------- */
   const overlay = drawer || fab || picker;
@@ -375,13 +383,6 @@ export default function App() {
   const title =
     view === 'hoje' ? 'Hoje' : MONTHS[cursor.getMonth()] + (cursor.getFullYear() !== now.getFullYear() ? ` de ${cursor.getFullYear()}` : '');
 
-  const dotsMonth = useMemo(() => {
-    const from = addDays(startOfMonth(cursor), -14);
-    return getItems(state, from, addDays(from, 80));
-  }, [state, cursor.getFullYear(), cursor.getMonth()]);
-  const dots = (d: Date) => itemsStartingOn(dotsMonth, d).filter((i) => i.type !== 'holiday').map((i) => i.color);
-
-
   const renderSheet = (sh: Sheet) => {
     switch (sh.t) {
       case 'detail':
@@ -511,10 +512,11 @@ export default function App() {
         </button>
       </header>
 
-      {picker && (
+      {pickerShown && (
         <MiniMonth
+          closing={!picker}
+          state={state}
           cursor={cursor}
-          dots={dots}
           onPick={(d) => {
             setPicker(false);
             if (view === 'hoje') goDay(d);

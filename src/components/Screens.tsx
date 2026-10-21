@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, addMonths, MONTHS, sameDay, startOfMonth, startOfWeek, WEEKDAY_LETTER } from '../lib/date';
-import { sortedVersions } from '../lib/items';
+import { getItems, itemsStartingOn, sortedVersions } from '../lib/items';
 import type { Escala, State, View } from '../lib/store';
-import { Sheet } from './common';
+import { Sheet, useCarousel } from './common';
 import { describeRegra } from './EscalaEditor';
 import { Icon, type IconName } from './Icon';
 
@@ -161,44 +161,95 @@ export function Fab({ open, setOpen, actions }: { open: boolean; setOpen: (v: bo
 
 /* ---------------- Mini calendário (ao tocar no mês) ---------------- */
 
-export function MiniMonth({ cursor, onPick, dots }: { cursor: Date; onPick: (d: Date) => void; dots: (d: Date) => string[] }) {
-  const [m, setM] = useState(startOfMonth(cursor));
-  const start = startOfWeek(m);
+function MiniPage({ state, month, cursor, onPick }: { state: State; month: Date; cursor: Date; onPick: (d: Date) => void }) {
+  const start = startOfWeek(month);
   const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+  const items = useMemo(() => getItems(state, start, addDays(start, 42)), [state, start.getTime()]);
   const today = new Date();
   return (
-    <div className="mini">
-      <div className="mini-head">
-        <button className="icon-btn" onClick={() => setM(addMonths(m, -1))} aria-label="Mês anterior">
-          <Icon name="left" />
-        </button>
-        <span>
-          {MONTHS[m.getMonth()]} {m.getFullYear()}
-        </span>
-        <button className="icon-btn" onClick={() => setM(addMonths(m, 1))} aria-label="Próximo mês">
-          <Icon name="right" />
-        </button>
-      </div>
-      <div className="mini-grid">
-        {WEEKDAY_LETTER.map((l, i) => (
-          <span key={i} className="mini-wd">
-            {l}
-          </span>
-        ))}
-        {days.map((d) => (
+    <div className="mini-grid">
+      {days.map((d) => {
+        const colors = [...new Set(itemsStartingOn(items, d).map((i) => i.color))];
+        const fill =
+          colors.length === 0
+            ? undefined
+            : colors.length === 1
+              ? colors[0]
+              : `conic-gradient(${colors.map((c, i) => `${c} ${(i / colors.length) * 100}% ${((i + 1) / colors.length) * 100}%`).join(', ')})`;
+        return (
           <button
             key={d.getTime()}
-            className={`mini-day${d.getMonth() !== m.getMonth() ? ' out' : ''}${sameDay(d, today) ? ' today' : ''}${sameDay(d, cursor) ? ' sel' : ''}`}
+            className={`mini-day${d.getMonth() !== month.getMonth() ? ' out' : ''}${sameDay(d, today) ? ' today' : ''}${sameDay(d, cursor) ? ' sel' : ''}${fill ? ' busy' : ''}`}
             onClick={() => onPick(d)}
           >
-            {d.getDate()}
-            <i>
-              {dots(d).slice(0, 3).map((c, i) => (
-                <b key={i} style={{ background: c }} />
-              ))}
-            </i>
+            {fill && <i style={{ background: fill }} />}
+            <span>{d.getDate()}</span>
           </button>
-        ))}
+        );
+      })}
+    </div>
+  );
+}
+
+export function MiniMonth({ state, cursor, closing, onPick }: { state: State; cursor: Date; closing?: boolean; onPick: (d: Date) => void }) {
+  const [m, setM] = useState(startOfMonth(cursor));
+  const monthKey = m.getFullYear() * 12 + m.getMonth();
+  const { viewport, trackRefs, handlers, slide } = useCarousel(
+    () => setM((cur) => addMonths(cur, -1)),
+    () => setM((cur) => addMonths(cur, 1)),
+    monthKey,
+  );
+
+  // abre só depois do primeiro quadro desenhado: a montagem é pesada e, se a transição
+  // começasse antes, correria durante o travamento e pularia direto para o fim
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (closing) return setEntered(false);
+    let r = requestAnimationFrame(() => (r = requestAnimationFrame(() => setEntered(true))));
+    return () => cancelAnimationFrame(r);
+  }, [closing]);
+
+  // as 126 células só mudam com dados, mês ou dia selecionado; abrir/fechar não as refaz
+  const pickRef = useRef(onPick);
+  pickRef.current = onPick;
+  const pages = useMemo(
+    () =>
+      [addMonths(m, -1), m, addMonths(m, 1)].map((pm) => (
+        <MiniPage key={pm.getTime()} state={state} month={pm} cursor={cursor} onPick={(d) => pickRef.current(d)} />
+      )),
+    [state, monthKey, cursor.getTime()],
+  );
+
+  return (
+    <div className={`mini-wrap${entered ? ' open' : ''}`}>
+      <div className="mini">
+        <div className="mini-head">
+          <button className="icon-btn" onClick={() => slide(1)} aria-label="Mês anterior">
+            <Icon name="left" />
+          </button>
+          <span>
+            {MONTHS[m.getMonth()]} {m.getFullYear()}
+          </span>
+          <button className="icon-btn" onClick={() => slide(-1)} aria-label="Próximo mês">
+            <Icon name="right" />
+          </button>
+        </div>
+        <div className="mini-wds">
+          {WEEKDAY_LETTER.map((l, i) => (
+            <span key={i} className="mini-wd">
+              {l}
+            </span>
+          ))}
+        </div>
+        <div
+          className="mini-viewport"
+          ref={viewport}
+          {...handlers}
+        >
+          <div className="mini-track" ref={trackRefs[0]}>
+            {pages}
+          </div>
+        </div>
       </div>
     </div>
   );

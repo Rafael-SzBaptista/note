@@ -161,30 +161,75 @@ hr {
 }
 
 /* ---------- mini calendário ---------- */
-.mini {
-  padding: 0 12px 8px;
-  border-bottom: 1px solid var(--line-soft);
-  animation: drop 0.18s ease-out;
+/* fechado precisa medir 0px: padding e linha ficam dentro da área recortada */
+.mini-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s 0.06s;
 }
-@keyframes drop {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
+.mini-wrap:not(.open) {
+  pointer-events: none;
+}
+.mini-wrap.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.3s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mini-wrap,
+  .mini-wrap.open {
+    transition: opacity 0.15s;
   }
+}
+.mini {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 12px;
+  box-shadow: inset 0 -1px var(--line-soft);
 }
 .mini-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 4px;
   text-transform: capitalize;
   font-weight: 500;
 }
-.mini-grid {
+.mini-head span {
+  min-width: 130px;
+  text-align: center;
+}
+.mini-wds,
+.mini-viewport {
+  max-width: 420px;
+  margin: 0 auto;
+}
+.mini-wds {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  max-width: 420px;
-  margin: 0 auto;
+}
+.mini-viewport {
+  overflow: hidden;
+  padding-bottom: 8px;
+  touch-action: pan-y;
+}
+.mini-track {
+  display: flex;
+  transform: translate3d(-100%, 0, 0);
+  will-change: transform;
+}
+.mini-grid {
+  flex: 0 0 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
 }
 .mini-wd {
   font-size: 11px;
@@ -194,34 +239,56 @@ hr {
 .mini-day {
   height: 40px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  border-radius: 50%;
   position: relative;
+}
+.mini-day span {
+  position: relative;
+}
+.mini-day i,
+.mini-day.sel::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+}
+.mini-day i {
+  content: none;
+}
+.mini-day.busy,
+.mini-day.out.busy,
+.mini-day.today.busy {
+  color: #fff;
+  font-weight: 500;
+}
+.mini-day.busy span {
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.45);
 }
 .mini-day.out {
   color: var(--text-3);
+}
+.mini-day.out i {
+  opacity: 0.45;
 }
 .mini-day.today {
   color: var(--primary);
   font-weight: 700;
 }
-.mini-day.sel {
+.mini-day.sel::after {
+  top: 1px;
+  bottom: 1px;
+  border: 2px solid var(--on-primary-container);
+}
+.mini-day.sel:not(.busy)::after {
+  border: 0;
   background: var(--primary-container);
-  color: var(--on-primary-container);
-}
-.mini-day i {
-  display: flex;
-  gap: 2px;
-  height: 4px;
-  margin-top: 2px;
-}
-.mini-day b {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
+  z-index: -1;
 }
 
 /* ---------- visão mês ---------- */
@@ -1228,4 +1295,31 @@ hr {
     font-size: 12px;
     height: 18px;
   }
+}
+
+/* carrossel da grade de horas: só a área dos dias desliza. O touch-action precisa estar também
+   no contêiner de rolagem, senão o navegador assume o gesto horizontal (e pode até voltar a página) */
+.tg,
+.tg-scroll {
+  touch-action: pan-y;
+}
+.tg {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tg-vp {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.tg-track {
+  display: flex;
+  height: 100%;
+  transform: translate3d(-100%, 0, 0);
+  will-change: transform;
+}
+.tg-page {
+  flex: 0 0 100%;
+  min-width: 0;
+  display: flex;
 }

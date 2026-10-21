@@ -1,25 +1,88 @@
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import type { Item } from '../lib/items';
 import { fmtTime } from '../lib/date';
 import { Icon } from './Icon';
 
-/** Swipe horizontal para navegar entre períodos. */
-export function useSwipe(onPrev: () => void, onNext: () => void) {
-  const start = useRef<{ x: number; y: number } | null>(null);
-  return {
-    onTouchStart: (e: React.TouchEvent) => {
-      const t = e.touches[0];
-      start.current = { x: t.clientX, y: t.clientY };
-    },
-    onTouchEnd: (e: React.TouchEvent) => {
-      if (!start.current) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - start.current.x;
-      const dy = t.clientY - start.current.y;
-      start.current = null;
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) (dx > 0 ? onPrev : onNext)();
-    },
+const SETTLE_MS = 260;
+
+/**
+ * Carrossel horizontal de períodos (anterior | atual | próximo). As faixas (`trackRefs`) acompanham
+ * o dedo; ao soltar, deslizam até o período vizinho ou voltam. Várias faixas andam juntas
+ * (ex.: cabeçalho e corpo da grade de horas). `pageKey` muda quando o período atual muda.
+ */
+export function useCarousel(onPrev: () => void, onNext: () => void, pageKey: number) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const tracks = useRef<(HTMLElement | null)[]>([]);
+  const trackRefs = useMemo(() => [0, 1, 2].map((i) => (el: HTMLElement | null) => void (tracks.current[i] = el)), []);
+  const drag = useRef<{ id: number; x: number; y: number; locked: boolean; last: { x: number; t: number }; v: number } | null>(null);
+  const timer = useRef(0);
+
+  const setX = (px: number, animate: boolean) => {
+    for (const el of tracks.current) {
+      if (!el) continue;
+      el.style.transition = animate ? `transform ${SETTLE_MS}ms cubic-bezier(0.22, 0.8, 0.3, 1)` : 'none';
+      el.style.transform = `translate3d(calc(-100% + ${px}px), 0, 0)`;
+    }
   };
+
+  // depois de trocar o período, volta as faixas para o centro sem animar
+  useLayoutEffect(() => {
+    clearTimeout(timer.current);
+    setX(0, false);
+  }, [pageKey]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  /** dir: 1 = período anterior, -1 = próximo */
+  const slide = (dir: 1 | -1) => {
+    clearTimeout(timer.current);
+    const w = viewport.current?.clientWidth || 1;
+    setX(dir * w, true);
+    timer.current = window.setTimeout(dir > 0 ? onPrev : onNext, SETTLE_MS);
+  };
+
+  const handlers = {
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      clearTimeout(timer.current);
+      drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, locked: false, last: { x: e.clientX, t: e.timeStamp }, v: 0 };
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const d = drag.current;
+      if (!d || d.id !== e.pointerId) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (!d.locked) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          drag.current = null;
+          return;
+        }
+        d.locked = true;
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      }
+      const dt = e.timeStamp - d.last.t;
+      if (dt > 0) d.v = (e.clientX - d.last.x) / dt;
+      d.last = { x: e.clientX, t: e.timeStamp };
+      setX(dx, false);
+    },
+    onPointerUp: (e: React.PointerEvent) => finish(e, false),
+    onPointerCancel: (e: React.PointerEvent) => finish(e, true),
+  };
+
+  const finish = (e: React.PointerEvent, cancelled: boolean) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    drag.current = null;
+    if (!d.locked) return;
+    const w = viewport.current?.clientWidth || 1;
+    const dx = e.clientX - d.x;
+    const fling = Math.abs(d.v) > 0.5 && Math.abs(dx) > 24;
+    const go = !cancelled && (Math.abs(dx) > w * 0.3 || fling);
+    if (!go) return setX(0, true);
+    slide((fling ? d.v : dx) > 0 ? 1 : -1); // > 0: arrastou para a direita (período anterior)
+  };
+
+  return { viewport, trackRefs, handlers, slide };
 }
 
 export const statusLabel = { normal: '', folga: 'Folga', troca: 'Trocado' } as const;
