@@ -519,8 +519,7 @@ export default function App() {
           cursor={cursor}
           onPick={(d) => {
             setPicker(false);
-            if (view === 'hoje') goDay(d);
-            else setCursor(d);
+            goDay(d);
           }}
         />
       )}
